@@ -35,7 +35,7 @@ void Work(UDP_Client::Ptr client,UDP_Base::Addr_Ptr server_addr)
         UDP_Base::Addr_Ptr addr = std::make_shared<sockaddr_in>();
         std::string res;
         int len = client->Recv_From(addr, res, MTU_LENGTH);
-        decoder.decode(client, res, server_addr);
+        decoder.decode(client, res, addr);
     }
 }
 
