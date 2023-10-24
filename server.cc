@@ -1,7 +1,7 @@
 #include "udp.h"
 #include "decoder.h"
 #include <memory>
-#define SERVER_PORT 7979
+#define SERVER_PORT 10000
 
 
 int main(int argc,char*argv[])

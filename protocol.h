@@ -1,5 +1,5 @@
-#pragma once
 #pragma pack(push, 1)
+#pragma once
 //取消字节对齐
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
@@ -26,7 +26,12 @@
 #define STATUS_P2P_MESSAGE_REQ      0xB
 #define STATUS_P2P_MESSAGE_ACK      0xC
 
+#define MACHINE_STATUS_ENTER_BT     0xD
+#define MACHINE_STATUS_ENTER_MSG    0xE
+#define MACHINE_STATUS_P2P_MODEL    0xF
 
+extern int machine_status;
+int machine_status = 0;
 
 class Protocol_Head
 {
@@ -34,10 +39,10 @@ public:
     uint8_t     version;
     uint8_t     status;
     uint8_t     length;
+    uint16_t    port;
     uint32_t    selfid;
     uint32_t    otherid;
     uint32_t    ip;
-    uint16_t    port;
 };
 
 #endif

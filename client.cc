@@ -3,17 +3,13 @@
 #include "decoder.h"
 #include <iostream>
 #include <thread>
-static int machine_status = 0;
-
-#define MACHINE_STATUS_ENTER_BT     0x01
-#define MACHINE_STATUS_ENTER_MSG    0x02
 
 
 #define SERVER_IP                   "192.168.124.142"
-#define SERVER_PORT                 7979
+#define SERVER_PORT                 10000
 
 static uint32_t selfid;
-
+static Client_Decoder decoder;
 
 void Connect_Req(UDP_Base::Ptr base,uint32_t otherid,UDP_Base::Addr_Ptr saddr)
 {
@@ -32,7 +28,16 @@ void Connect_Req(UDP_Base::Ptr base,uint32_t otherid,UDP_Base::Addr_Ptr saddr)
 
 }
 
-
+void Work(UDP_Client::Ptr client,UDP_Base::Addr_Ptr server_addr)
+{
+    while(1)
+    {
+        UDP_Base::Addr_Ptr addr = std::make_shared<sockaddr_in>();
+        std::string res;
+        int len = client->Recv_From(addr, res, MTU_LENGTH);
+        decoder.decode(client, res, server_addr);
+    }
+}
 
 
 int main(int argc,char* argv[])
@@ -48,6 +53,7 @@ int main(int argc,char* argv[])
     server_addr->sin_addr.s_addr = inet_addr(SERVER_IP);
     server_addr->sin_port = htons(SERVER_PORT);
     server_addr->sin_family = AF_INET;
+    decoder._saddr = server_addr;
     UDP_Base::Addr_Ptr addr;
     //client->Connect(server_addr);
     {
@@ -71,7 +77,7 @@ int main(int argc,char* argv[])
             std::cout << "connection success" << std::endl;
         }
     }
-    // std::thread th()
+    std::thread th(Work,client,server_addr);
     std::cout<<"Press C to change model"<<std::endl;
     std::cout<<"Press Q to exit program"<<std::endl;
     std::cout<<"Press X to enter p2p model"<<std::endl;
@@ -106,7 +112,6 @@ int main(int argc,char* argv[])
 
             continue;
         }
-
         if(machine_status == MACHINE_STATUS_ENTER_MSG){
             Protocol_Head head;
             head.version = 1;
@@ -119,14 +124,22 @@ int main(int argc,char* argv[])
             msg+=buffer;
             client->Send_To(server_addr,msg);
         }
-
-        std::string res;
-        int len = client->Recv_From(addr,res,MTU_LENGTH);
-        std::cout<<len<<std::endl;
-        Client_Decoder decoder(server_addr);
-        decoder.decode(client,res,server_addr);
+        else if(machine_status == MACHINE_STATUS_P2P_MODEL)
+        {
+            Protocol_Head head;
+            head.version = 1;
+            head.length = buffer.length();
+            head.selfid = selfid;
+            head.status = STATUS_P2P_MESSAGE_REQ;
+            memset(temp,0,hlen);
+            memcpy(temp,&head,hlen);
+            std::string msg(temp,hlen);
+            msg+=buffer;
+            client->Send_To(decoder._caddr,msg);
+        }
 
     }
+    th.join();
     delete temp;
     return 0;
 }

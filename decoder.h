@@ -6,6 +6,8 @@
 #include "udp.h"
 #include "protocol.h"
 #include <string.h>
+#define IP_LENGTH               4
+#define PORT_LENGTH             2
 
 class Decoder_Base
 {
@@ -81,6 +83,7 @@ private:
         head.version = 1;
         head.status = STATUS_LOGIN_ACK;
         int hlen = sizeof(Protocol_Head);
+       //// std::cout<<hlen<<std::endl;
         char* temp = new char[hlen];
         memcpy(temp,&head,hlen);
         buffer.assign(temp,hlen);
@@ -97,6 +100,7 @@ private:
         Protocol_Head head;
         head.version = 1;
         int hlen= sizeof(Protocol_Head);
+       // std::cout<<hlen<<std::endl;
         char* buffer = new char[hlen];
         if (other_addr == nullptr)
         {
@@ -107,15 +111,17 @@ private:
             return;
         }
         head.status = STATUS_CONN_ACK;
-        head.ip = other_addr->sin_addr.s_addr;
-        head.port = other_addr->sin_port;
+        memcpy(&head.ip,&other_addr->sin_addr.s_addr,IP_LENGTH);
+        memcpy(&head.port,&other_addr->sin_port,PORT_LENGTH);
+        //std::cout<<head.ip<<" : "<<head.port<<std::endl;
         memset(buffer,0,hlen);
         memcpy(buffer,&head,hlen);
         msg.assign(buffer,hlen);
         server->Send_To(caddr,msg);
-        head.ip = caddr->sin_addr.s_addr;
-        head.port = caddr->sin_port;
+        memcpy(&head.ip,&caddr->sin_addr.s_addr,IP_LENGTH);
+        memcpy(&head.port,&caddr->sin_port,PORT_LENGTH);
         head.status = STATUS_NOTIFY_REQ;
+        //std::cout<<head.ip<<" : "<<head.port<<std::endl;
         memset(buffer,0,hlen);
         memcpy(buffer,&head,hlen);
         msg.assign(buffer,hlen);
@@ -131,6 +137,7 @@ private:
         head.version = 1;
         head.status = STATUS_P2P_MESSAGE_ACK;
         int hlen = sizeof(Protocol_Head);
+       // std::cout<<hlen<<std::endl;
         char* buffer = new char[hlen];
         memcpy(buffer,&head,hlen);
         std::string msg(buffer,hlen);
@@ -142,10 +149,10 @@ private:
 class Client_Decoder:public Decoder_Base
 {
 public:
-    Client_Decoder(const UDP_Base::Addr_Ptr& saddr)
+    Client_Decoder()
     {
         this->_caddr = std::make_shared<sockaddr_in>();
-        this->_saddr = saddr;
+        this->_saddr = std::make_shared<sockaddr_in>();
         P2P_Modle = false;
     }
 
@@ -158,24 +165,26 @@ public:
         memcpy(&head,buffer.c_str(),sizeof(Protocol_Head));
         std::string body = buffer.substr(sizeof(Protocol_Head));
         int hlen = sizeof(Protocol_Head);
+       //// std::cout<<hlen<<std::endl;
         switch (head.status)
         {
         case STATUS_NOTIFY_REQ:
         {
-            Protocol_Head head;
-            head.version = 1;
-            head.status = STATUS_NOTIFY_ACK;
+            Protocol_Head ret_head;
+            ret_head.version = 1;
+            ret_head.status = STATUS_NOTIFY_ACK;
             char* temp = new char[hlen];
             std::string str;
-            memcpy(temp,&head,hlen);
+            memcpy(temp,&ret_head,hlen);
             str.assign(temp,hlen);
             client->Send_To(_saddr,str);
-            head.status = STATUS_P2P_CONNECT_REQ;
-            _caddr->sin_addr.s_addr = head.ip;
-            _caddr->sin_port = head.port;
+            ret_head.status = STATUS_P2P_CONNECT_REQ;
+            memcpy(&_caddr->sin_addr.s_addr,&head.ip,IP_LENGTH);
+            memcpy(&_caddr->sin_port,&head.port,PORT_LENGTH);
+            std::cout<<inet_ntoa(caddr->sin_addr)<<" : "<<ntohs(caddr->sin_port)<<"  msg :"<<body<<std::endl;
             _caddr->sin_family = AF_INET;
             memset(temp,0,hlen);
-            memcpy(temp,&head,hlen);
+            memcpy(temp,&ret_head,hlen);
             str.assign(temp,hlen);
             client->Send_To(_caddr,str);
             delete temp;
@@ -183,23 +192,25 @@ public:
         }
         case STATUS_P2P_CONNECT_REQ:
         {
-            if(caddr->sin_addr.s_addr == _caddr->sin_addr.s_addr&&_caddr->sin_port == caddr->sin_port)
+            if(caddr->sin_addr.s_addr == _caddr->sin_addr.s_addr)
             {
-                Protocol_Head head;
-                head.version = 1;
-                head.status = STATUS_P2P_CONNECT_ACK;
+                machine_status = MACHINE_STATUS_P2P_MODEL;
+                std::cout<<inet_ntoa(caddr->sin_addr)<<" : "<<ntohs(caddr->sin_port)<<"  msg :"<<body<<std::endl;
+                Protocol_Head ret_head;
+                ret_head.version = 1;
+                ret_head.status = STATUS_P2P_CONNECT_ACK;
                 char* temp = new char[hlen];
-                memcpy(temp,&head,hlen);
+                memcpy(temp,&ret_head,hlen);
                 std::string str(temp,hlen);
                 client->Send_To(_caddr,str);
                 delete temp;
             }
             else{
-                Protocol_Head head;
-                head.version = 1;
-                head.status = STATUS_P2P_CONNECT_FAIL;
+                Protocol_Head ret_head;
+                ret_head.version = 1;
+                ret_head.status = STATUS_P2P_CONNECT_FAIL;
                 char* temp = new char[hlen];
-                memcpy(temp,&head,hlen);
+                memcpy(temp,&ret_head,hlen);
                 std::string str(temp,hlen);
                 client->Send_To(_caddr,str);
                 delete temp;
@@ -208,6 +219,7 @@ public:
         }
         case STATUS_P2P_CONNECT_ACK:
         {
+            machine_status = MACHINE_STATUS_P2P_MODEL;
             std::cout<<"connect success"<<std::endl;
             break;
         }
@@ -220,18 +232,19 @@ public:
             break;
         case STATUS_CONN_ACK: //请求连接的ack
         {
-            _caddr->sin_addr.s_addr = head.ip;
-            _caddr->sin_port = head.port;
+            memcpy(&_caddr->sin_addr.s_addr,&head.ip,IP_LENGTH);
+            memcpy(&_caddr->sin_port,&head.port,PORT_LENGTH);
             _caddr->sin_family = AF_INET;
+            std::cout<<"_caddr :" << inet_ntoa(caddr->sin_addr)<<std::endl;
             break;
         }
         case STATUS_P2P_MESSAGE_REQ:
         {
-            Protocol_Head head;
-            head.version = 1;
-            head.status = STATUS_P2P_MESSAGE_ACK;
+            Protocol_Head ret_head;
+            ret_head.version = 1;
+            ret_head.status = STATUS_P2P_MESSAGE_ACK;
             char* buffer = new char[hlen];
-            memcpy(buffer,&head,hlen);
+            memcpy(buffer,&ret_head,hlen);
             std::cout<<inet_ntoa(caddr->sin_addr)<<" : "<<ntohs(caddr->sin_port)<<"  msg :"<<body<<std::endl;
             std::string str(buffer,hlen);
             client->Send_To(caddr,str);
